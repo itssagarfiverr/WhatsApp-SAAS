@@ -1,5 +1,5 @@
 # WhatsApp SaaS Platform
-### Powered by Baileys + Node.js + Socket.io
+### Powered by Love + Node.js + Socket.io
 
 A production-ready, multi-user WhatsApp gateway platform with REST API, webhook support, and real-time QR code authentication.
 
