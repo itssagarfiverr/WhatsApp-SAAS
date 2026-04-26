@@ -226,4 +226,156 @@ curl -X POST http://localhost:3000/api/send-message \
 
 ---
 
-Made with ❤️ using [@whiskeysockets/baileys](https://github.com/WhiskeySockets/Baileys) by [@itssagarfiverr](https://github.com/itssagarfiverr)
+## FOR aaPanel
+## aaPanel Nginx Config — WhatsApp SaaS
+
+### Step 1: aaPanel mein Website banao (Main Domain)
+
+```
+aaPanel → Website → Add Site
+Domain: wa.greathost.in
+Root Directory: /home/whatsapp/whatsapp/public
+PHP Version: Pure Static (No PHP needed)
+```
+
+### Step 2: Nginx Config Override
+
+aaPanel → Website → `wa.greathost.in` → Config → paste karo:
+
+```nginx
+server {
+    listen 80;
+    listen 443 ssl http2;
+    server_name wa.greathost.in;
+
+    # SSL — aaPanel Let's Encrypt se auto fill hoga
+    ssl_certificate     /www/server/panel/vhost/cert/wa.greathost.in/fullchain.pem;
+    ssl_certificate_key /www/server/panel/vhost/cert/wa.greathost.in/privkey.pem;
+    ssl_protocols       TLSv1.2 TLSv1.3;
+
+    # HTTP → HTTPS redirect
+    if ($scheme = http) {
+        return 301 https://$host$request_uri;
+    }
+
+    # File upload limit (Excel bulk send ke liye)
+    client_max_body_size 50M;
+
+    # WebSocket support (Socket.io ke liye ZARURI hai)
+    location /socket.io/ {
+        proxy_pass         http://127.0.0.1:3000;
+        proxy_http_version 1.1;
+        proxy_set_header   Upgrade $http_upgrade;
+        proxy_set_header   Connection "upgrade";
+        proxy_set_header   Host $host;
+        proxy_set_header   X-Forwarded-Host $host;
+        proxy_set_header   X-Real-IP $remote_addr;
+        proxy_set_header   X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header   X-Forwarded-Proto $scheme;
+        proxy_read_timeout 86400;
+        proxy_send_timeout 86400;
+    }
+
+    # Sab kuch Node.js ko forward karo
+    location / {
+        proxy_pass         http://127.0.0.1:3000;
+        proxy_http_version 1.1;
+        proxy_set_header   Upgrade $http_upgrade;
+        proxy_set_header   Connection "upgrade";
+        proxy_set_header   Host $host;
+        proxy_set_header   X-Forwarded-Host $host;
+        proxy_set_header   X-Real-IP $remote_addr;
+        proxy_set_header   X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header   X-Forwarded-Proto $scheme;
+        proxy_read_timeout 86400;
+        proxy_send_timeout 86400;
+        proxy_cache_bypass $http_upgrade;
+    }
+}
+```
+
+---
+
+### Step 3: Reseller Domain (storemela.xyz)
+
+aaPanel → Website → Add Site:
+```
+Domain: storemela.xyz
+Root Directory: /home/whatsapp/whatsapp/public  ← SAME folder
+PHP: Pure Static
+```
+
+Phir Config mein paste karo:
+
+```nginx
+server {
+    listen 80;
+    listen 443 ssl http2;
+    server_name storemela.xyz www.storemela.xyz;
+
+    ssl_certificate     /www/server/panel/vhost/cert/storemela.xyz/fullchain.pem;
+    ssl_certificate_key /www/server/panel/vhost/cert/storemela.xyz/privkey.pem;
+    ssl_protocols       TLSv1.2 TLSv1.3;
+
+    if ($scheme = http) {
+        return 301 https://$host$request_uri;
+    }
+
+    client_max_body_size 50M;
+
+    # WebSocket
+    location /socket.io/ {
+        proxy_pass         http://127.0.0.1:3000;
+        proxy_http_version 1.1;
+        proxy_set_header   Upgrade $http_upgrade;
+        proxy_set_header   Connection "upgrade";
+        proxy_set_header   Host $host;
+        # CRITICAL: Ye header Node.js ko batata hai ki storemela.xyz ka request hai
+        proxy_set_header   X-Forwarded-Host $host;
+        proxy_set_header   X-Real-IP $remote_addr;
+        proxy_set_header   X-Forwarded-Proto $scheme;
+        proxy_read_timeout 86400;
+    }
+
+    location / {
+        proxy_pass         http://127.0.0.1:3000;
+        proxy_http_version 1.1;
+        proxy_set_header   Upgrade $http_upgrade;
+        proxy_set_header   Connection "upgrade";
+        proxy_set_header   Host $host;
+        # CRITICAL: Reseller domain detection ke liye
+        proxy_set_header   X-Forwarded-Host $host;
+        proxy_set_header   X-Real-IP $remote_addr;
+        proxy_set_header   X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header   X-Forwarded-Proto $scheme;
+        proxy_read_timeout 86400;
+        proxy_cache_bypass $http_upgrade;
+    }
+}
+```
+
+---
+
+### Step 4: SSL Certificate
+
+aaPanel → Website → domain → SSL → Let's Encrypt → Apply
+
+---
+
+### Step 5: PM2 se App Start karo
+
+```bash
+cd /home/whatsapp/whatsapp
+npm install
+pm2 start app.js --name whatsapp-saas
+pm2 save
+pm2 startup
+```
+
+---
+
+### Naye Reseller Domain ke liye (Template)
+
+Har naye reseller ke liye bas aaPanel mein naya website add karo, same `/home/whatsapp/whatsapp/public` root rakho, aur ye config paste karo — sirf `server_name` aur SSL paths change karo. Node.js ek hi chalega, domain `X-Forwarded-Host` se detect hoga automatically.
+
+Made with ❤️
